@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>車城國小｜因材網學力檢測考古題 AI 智慧補救系統</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.5/dist/signature_pad.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root { --primary:#1e88e5; --primary-dark:#1565c0; --success:#43a047; --bg:#f4f7f6; }
+        body { background:var(--bg); font-family:'Segoe UI',sans-serif; }
+        .app-header { background:linear-gradient(135deg,var(--primary),var(--primary-dark)); color:#fff; padding:20px 0; box-shadow:0 4px 6px rgba(0,0,0,.1); margin-bottom:30px; }
+        .card { border-radius:15px; border:none; box-shadow:0 6px 12px rgba(0,0,0,.05); }
+        .btn-custom { border-radius:25px; padding:10px 25px; font-weight:bold; }
+
+        .option-btn { display:block; width:100%; padding:14px 18px; margin-bottom:10px; border:2px solid #e0e0e0; border-radius:12px; background:#fff; text-align:left; font-size:1rem; cursor:pointer; transition:all .2s; word-break:break-word; }
+        .option-btn:hover { background:#f0f8ff; border-color:var(--primary); transform:translateX(3px); }
+        .option-btn.selected { background:#e3f2fd; border-color:var(--primary); font-weight:bold; color:var(--primary-dark); }
+        .option-prefix { display:inline-block; width:28px; height:28px; line-height:28px; text-align:center; border-radius:50%; background:#e0e0e0; font-weight:bold; margin-right:10px; font-size:.85rem; }
+        .option-btn.selected .option-prefix { background:var(--primary); color:#fff; }
+
+        .badge-easy { background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7; }
+        .badge-medium { background:#fff8e1; color:#f57f17; border:1px solid #ffe082; }
+        .badge-hard { background:#fce4ec; color:#c62828; border:1px solid #ef9a9a; }
+        .q-type-badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:.75rem; font-weight:bold; margin-bottom:8px; }
+        .q-type-single { background:#e3f2fd; color:#1565c0; }
+        .q-type-fill { background:#f3e5f5; color:#6a1b9a; }
+
+        .fill-input { border:2px solid #e0e0e0; border-radius:12px; padding:14px 18px; font-size:1rem; width:100%; transition:border-color .2s; }
+        .fill-input:focus { border-color:var(--primary); outline:none; box-shadow:0 0 0 3px rgba(30,136,229,.15); }
+
+        #question-container { animation:fadeIn .3s ease; }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+        .ai-panel { background:#e8f5e9; border-left:5px solid #4caf50; padding:15px; border-radius:5px; display:none; margin-top:15px; }
+        .ai-progress-panel { background:#fff; border:1px solid #e0e0e0; border-radius:12px; padding:16px; margin-top:12px; display:none; }
+        .batch-log { max-height:150px; overflow-y:auto; font-size:.8rem; color:#555; }
+        .batch-log-item { padding:3px 0; border-bottom:1px solid #f0f0f0; }
+        .batch-log-item:last-child { border-bottom:none; }
+
+        #draw-panel { display:none; margin-top:15px; }
+        .signature-pad { border:2px dashed #b0bec5; border-radius:10px; background:#fff; width:100%; height:280px; touch-action:none; }
+        
+        .mascot-wrap { position:relative; display:inline-block; }
+        .mascot-img { width:90px; height:90px; border-radius:50%; background:#fff; box-shadow:0 4px 14px rgba(0,0,0,.18); animation: mascotBob 3s ease-in-out infinite; display:flex; align-items:center; justify-content:center; font-size:40px; color:#1565c0; }
+        @keyframes mascotBob { 0%,100% { transform:translateY(0) rotate(-2deg); } 50% { transform:translateY(-8px) rotate(2deg); } }
+        
+        .header-inner { display:flex; align-items:center; justify-content:center; gap:18px; flex-wrap:wrap; }
+        .header-text { text-align:left; }
+        .header-text h2 { font-size:1.45rem; margin:0; }
+        .header-text p  { margin:4px 0 0; font-size:.88rem; opacity:.9; }
+
+        .progress { height:10px; border-radius:10px; }
+        .progress-bar { transition:width .4s ease; }
+
+        .results-table th { background:#1e88e5; color:#fff; font-size:.82rem; white-space:nowrap; }
+        .results-table td { font-size:.82rem; vertical-align:middle; }
+        .score-high { color:#2e7d32; font-weight:bold; }
+        .score-mid  { color:#f57f17; font-weight:bold; }
+        .score-low  { color:#c62828; font-weight:bold; }
+        .detail-row { background:#fafafa; }
+        .detail-btn { cursor:pointer; font-size:.78rem; }
+
+        .node-card { border-radius:12px; border:none; box-shadow:0 2px 8px rgba(0,0,0,.08); margin-bottom:12px; }
+        .node-bar { height:18px; border-radius:9px; background:linear-gradient(90deg,#e53935,#ef9a9a); transition:width .6s ease; }
+        .node-bar-wrap { background:#f5f5f5; border-radius:9px; overflow:hidden; }
+
+        .worksheet-node-title { background:#1565c0; color:#fff; padding:8px 14px; border-radius:8px 8px 0 0; font-weight:bold; }
+        .worksheet-problem { border:1px solid #e0e0e0; border-radius:0 0 8px 8px; padding:14px; margin-bottom:16px; }
+        .ws-step { background:#fff8e1; border-left:4px solid #ffc107; padding:8px 12px; border-radius:4px; font-size:.88rem; margin-bottom:10px; }
+        .ws-hint { background:#e3f2fd; border-left:4px solid #1e88e5; padding:6px 12px; border-radius:4px; font-size:.82rem; color:#1565c0; margin-top:8px; }
+        
+        @media print {
+            .app-header, .nav-tabs, .tab-content, #view-login, #view-quiz,
+            .btn, select, input, .mb-3, .alert, .ai-panel,
+            .d-flex, #ai-generation-panel, #analysis-container,
+            #worksheet-container > .d-flex { display:none !important; }
+            body, html { margin:0 !important; padding:0 !important; background:#fff !important; }
+            #printable-worksheet { display:block !important; width:100% !important; margin:0 !important; padding:0 !important; font-size:11pt !important; color:#000 !important; }
+            * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+            .ws-node-block { page-break-inside:avoid; margin-bottom:14pt !important; }
+            .ws-problem-item { page-break-inside:avoid; }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-header">
+        <div class="header-inner">
+            <div class="mascot-wrap">
+                <div class="mascot-img"><i class="fa-solid fa-graduation-cap"></i></div>
+            </div>
+            <div class="header-text">
+                <h2>車城國小｜因材網學力檢測考古題 AI 智慧補救系統</h2>
+                <p>專為因材網學力檢測設計　×　Gemini AI 差異化出題　×　弱點節點精準補救</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="view-login" class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card p-4">
+                    <ul class="nav nav-pills mb-4 justify-content-center">
+                        <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#student-login">學生測驗登入</button></li>
+                        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#teacher-login">教師管理後台</button></li>
+                    </ul>
+                    <div class="tab-content">
+                        <div class="tab-pane fade show active" id="student-login">
+                            <div class="alert alert-info py-2 small mb-3">
+                                <i class="fa-solid fa-circle-info"></i> 若找不到名字，請按 <strong>F5</strong> 重新整理！
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted">1. 選擇老師發布的任務</label>
+                                <select id="task-select" class="form-select form-select-lg" onchange="loadStudents()"><option>載入中...</option></select>
+                            </div>
+                            <div class="mb-4">
+                                <label class="form-label text-muted">2. 選擇你的姓名</label>
+                                <select id="student-select" class="form-select form-select-lg" disabled><option>請先選擇任務</option></select>
+                            </div>
+                            <button class="btn btn-primary w-100 btn-lg btn-custom" onclick="startQuiz()">開始挑戰 <i class="fa-solid fa-rocket"></i></button>
+                        </div>
+                        <div class="tab-pane fade" id="teacher-login">
+                            <div class="mb-4">
+                                <label class="form-label">管理員密碼</label>
+                                <input type="password" id="admin-pwd" class="form-control form-control-lg" placeholder="預設 1234">
+                            </div>
+                            <button class="btn btn-success w-100 btn-lg btn-custom" onclick="loginAdmin()">登入後台 <i class="fa-solid fa-user-tie"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-admin" class="row justify-content-center" style="display:none;">
+            <div class="col-md-10">
+                <div class="card p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
+                        <h4 class="mb-0"><i class="fa-solid fa-chalkboard-user"></i> 教師管理儀表板</h4>
+                        <div>
+                            <button class="btn btn-outline-primary btn-sm me-2" onclick="switchView('view-login')"><i class="fa-solid fa-house"></i> 回首頁</button>
+                            <button class="btn btn-outline-danger btn-sm" onclick="location.reload()"><i class="fa-solid fa-right-from-bracket"></i> 登出</button>
+                        </div>
+                    </div>
+                    <ul class="nav nav-tabs mb-3" id="adminTab">
+                        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-upload"><i class="fa-solid fa-upload"></i> 建立任務</button></li>
+                        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-results" onclick="loadAdminResults()"><i class="fa-solid fa-user-check"></i> 學生成績</button></li>
+                        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-qerror" onclick="loadQuestionErrors()"><i class="fa-solid fa-circle-xmark"></i> 各題錯誤率</button></li>
+                        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-analysis" onclick="loadClassAnalysis()"><i class="fa-solid fa-magnifying-glass-chart"></i> 差異化分析</button></li>
+                        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-settings"><i class="fa-solid fa-gear"></i> 系統設定</button></li>
+                    </ul>
+                    <div class="tab-content">
+                        <div class="tab-pane fade show active" id="tab-upload">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div class="card bg-light p-3">
+                                        <h6 class="fw-bold mb-3">上傳 XLSX 建立任務</h6>
+                                        <div class="row g-2 mb-3">
+                                            <div class="col-8"><input type="text" id="new-task-name" class="form-control" placeholder="任務名稱 (例: 五甲期中補救)"></div>
+                                            <div class="col-4">
+                                                <select id="task-grade" class="form-select">
+                                                    <option value="三年級">三年級</option>
+                                                    <option value="四年級">四年級</option>
+                                                    <option value="五年級" selected>五年級</option>
+                                                    <option value="六年級">六年級</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <input type="file" id="excel-file" class="form-control mb-3" accept=".xlsx,.xls">
+                                        <button class="btn btn-primary w-100" onclick="processExcel()"><i class="fa-solid fa-upload"></i> 解析名單與弱點</button>
+                                        <div id="ai-generation-panel" class="ai-panel">
+                                            <h6 class="text-success"><i class="fa-solid fa-robot"></i> 發現全班共有 <span id="weak-count">0</span> 個主要弱點節點</h6>
+                                            <p class="small text-muted mb-2">節點：<span id="weak-list"></span></p>
+                                            <button id="btn-ai-generate" class="btn btn-success w-100" onclick="triggerAIGeneration()">
+                                                <i class="fa-solid fa-wand-magic-sparkles"></i> 呼叫 Gemini AI 批次擴充題庫
+                                            </button>
+                                            <div class="ai-progress-panel" id="ai-progress-panel">
+                                                <div class="d-flex justify-content-between mb-1">
+                                                    <span class="small fw-bold text-success" id="progress-title">🤖 AI 命題進行中...</span>
+                                                    <span class="small text-muted" id="progress-count">0 / 0 批</span>
+                                                </div>
+                                                <div class="progress mb-2" style="height:14px;">
+                                                    <div id="ai-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width:0%"></div>
+                                                </div>
+                                                <div class="batch-log" id="batch-log"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="tab-results">
+                            <div class="mb-3 d-flex gap-2 align-items-center flex-wrap">
+                                <select id="results-task-select" class="form-select" style="max-width:260px;" onchange="loadAdminResults()"><option value="">-- 選擇任務 --</option></select>
+                                <span class="text-muted small" id="results-summary"></span>
+                            </div>
+                            <div id="results-table-container"><p class="text-muted text-center py-4">請先選擇任務</p></div>
+                        </div>
+
+                        <div class="tab-pane fade" id="tab-qerror">
+                            <div class="mb-3 d-flex gap-2 align-items-center flex-wrap">
+                                <select id="qerror-task-select" class="form-select" style="max-width:260px;" onchange="loadQuestionErrors()"><option value="">-- 選擇任務 --</option></select>
+                                <span class="text-muted small" id="qerror-summary"></span>
+                            </div>
+                            <div id="qerror-container"><p class="text-muted text-center py-4">請先選擇任務</p></div>
+                        </div>
+
+                        <div class="tab-pane fade" id="tab-analysis">
+                            <div class="mb-3 d-flex gap-2 align-items-center flex-wrap">
+                                <select id="analysis-task-select" class="form-select" style="max-width:260px;" onchange="loadClassAnalysis()"><option value="">-- 選擇任務 --</option></select>
+                                <span class="badge bg-secondary" id="analysis-grade-badge"></span>
+                            </div>
+                            <div id="analysis-container"><p class="text-muted text-center py-4">請先選擇任務</p></div>
+                            <div id="worksheet-container" style="display:none;" class="mt-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h6 class="fw-bold mb-0"><i class="fa-solid fa-file-lines"></i> AI 生成教學講義</h6>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="printWorksheet()"><i class="fa-solid fa-print"></i> 列印講義</button>
+                                </div>
+                                <div id="worksheet-content"></div>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="tab-settings">
+                            <div class="row">
+                                <div class="col-md-5">
+                                    <div class="card bg-light p-3">
+                                        <h6 class="fw-bold mb-3">系統設定</h6>
+                                        <div class="mb-3">
+                                            <label class="form-label text-muted small mb-1">學生測驗題數（預設 10 題）</label>
+                                            <div class="input-group">
+                                                <input type="number" id="setting-quiz-count" class="form-control" value="10" min="1" max="50">
+                                                <button class="btn btn-primary" onclick="saveQuizSettings()">儲存</button>
+                                            </div>
+                                        </div>
+                                        <hr>
+                                        <button class="btn btn-outline-secondary w-100 mb-2" onclick="API.setupDatabase()"><i class="fa-solid fa-database"></i> 初始化資料庫</button>
+                                        <button class="btn btn-outline-warning w-100 mb-2" onclick="doClearCache()"><i class="fa-solid fa-broom"></i> 清除快取＋修正正解格式</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-quiz" style="display:none;">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 id="quiz-student-name" class="text-primary fw-bold mb-0"></h5>
+                <span class="badge bg-warning text-dark fs-6" id="timer">00:00</span>
+            </div>
+            <div class="progress mb-4"><div id="quiz-progress" class="progress-bar bg-success" style="width:0%"></div></div>
+            <div class="card p-4 shadow-sm">
+                <div id="question-container"></div>
+                <div class="mt-3 text-end">
+                    <button class="btn btn-outline-info btn-sm" onclick="toggleCanvas()"><i class="fa-solid fa-pen"></i> 計算紙</button>
+                </div>
+                <div id="draw-panel">
+                    <canvas id="signature-pad" class="signature-pad"></canvas>
+                    <div class="mt-2 d-flex gap-2">
+                        <button class="btn btn-light btn-sm" onclick="sigPad.clear()"><i class="fa-solid fa-eraser"></i> 清除</button>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between mt-4">
+                    <button class="btn btn-secondary px-4" id="btn-prev" onclick="navQuestion(-1)" disabled>上一題</button>
+                    <button class="btn btn-primary px-4" id="btn-next" onclick="navQuestion(1)">下一題</button>
+                    <button class="btn btn-success px-4" id="btn-submit" onclick="submitQuiz()" style="display:none;"><i class="fa-solid fa-paper-plane"></i> 交卷</button>
+                </div>
+            </div>
+        </div>
+        <div class="text-center mt-5 mb-4 text-muted small fw-bold"><i class="fa-solid fa-school"></i> 車城國小資訊教師 | Google Apps Script 製作</div>
+    </div>
+
+    <script>
+    // =========================================================
+    // ⚠️ 必改！請將下方的網址替換成您剛剛重新部署得到的 GAS Web App URL
+    // =========================================================
+    const GAS_API_URL = "請把這裡替換成您的GAS部署網址";
+
+    // 核心 API 呼叫函數
+    async function fetchAPI(action, data = {}) {
+        try {
+            const response = await fetch(GAS_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action: action, data: data })
+            });
+            const result = await response.json();
+            if (result.status === 'success') {
+                return result.data;
+            } else {
+                throw new Error(result.message);
+            }
+        } catch (error) {
+            console.error(`API Error (${action}):`, error);
+            throw error;
+        }
+    }
+
+    // 將原本的 google.script.run 轉為呼叫 fetchAPI
+    const API = {
+        getTasks: () => fetchAPI('getTasks'),
+        getStudents: t => fetchAPI('getStudents', { taskName: t }),
+        generateQuiz: (n,t) => fetchAPI('generateQuiz', { weakNode: n, taskName: t }),
+        submitQuizResult: d => fetchAPI('submitQuizResult', { payload: d }),
+        verifyAdmin: p => fetchAPI('verifyAdmin', { pwd: p }),
+        uploadTaskData: (n,g,d,nd) => fetchAPI('uploadTaskData', { taskName: n, grade: g, studentData: d, uniqueNodes: nd }),
+        setupDatabase: async () => {
+            try {
+                const msg = await fetchAPI('setupDatabase');
+                Swal.fire('完成', msg, 'success');
+            } catch (err) { Swal.fire('錯誤', err.message, 'error'); }
+        },
+        generateBatch: (nodes, grade, batchIdx) => fetchAPI('generateBatch', { nodesArray: nodes, grade: grade, batchIndex: batchIdx }),
+        getQuizSettings: () => fetchAPI('getQuizSettings'),
+        updateQuizSettings: c => fetchAPI('updateQuizSettings', { count: c }),
+        clearBankCache: () => fetchAPI('clearBankCache'),
+        getQuestionErrorRates: t => fetchAPI('getQuestionErrorRates', { taskName: t }),
+        getTaskResults: t => fetchAPI('getTaskResults', { taskName: t }),
+        analyzeClassWeakNodes: t => fetchAPI('analyzeClassWeakNodes', { taskName: t }),
+        generateTeachingWorksheet: (nodes,grade) => fetchAPI('generateTeachingWorksheet', { topNodes: nodes, grade: grade })
+    };
+
+    let globalUniqueNodes = [];
+    let currentQuestions=[], currentIdx=0, userAnswers={}, quizTimer=null, secondsElapsed=0, sigPad=null;
+
+    function escapeHtml(str) { return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+    function normalizeAnswer(str) { return String(str||'').trim().replace(/\s+/g,'').replace(/[\uff10-\uff19]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)).replace(/，/g,',').toLowerCase(); }
+
+    window.onload = async () => {
+        initCanvas();
+        try {
+            const tasks = await API.getTasks();
+            const sel = document.getElementById('task-select');
+            sel.innerHTML = '<option value="">-- 請選擇任務 --</option>';
+            tasks.forEach(t => { const o=document.createElement('option'); o.value=t; o.textContent=t; sel.appendChild(o); });
+        } catch(e) {
+            Swal.fire('無法連線到資料庫', '請確認您的 GAS_API_URL 已經設定正確。', 'error');
+        }
+    };
+
+    function switchView(id) {
+        ['view-login','view-admin','view-quiz'].forEach(v => {
+            document.getElementById(v).style.display = v===id ? (id==='view-quiz'?'block':'flex') : 'none';
+        });
+        if(id==='view-login') window.onload();
+    }
+
+    async function loginAdmin() {
+        const pwd = document.getElementById('admin-pwd').value;
+        const valid = await API.verifyAdmin(pwd);
+        if(valid) {
+            switchView('view-admin');
+            const s = await API.getQuizSettings();
+            document.getElementById('setting-quiz-count').value = s.quizCount;
+            await populateAdminTaskSelects();
+        } else { Swal.fire('錯誤','密碼不正確','error'); }
+    }
+
+    async function populateAdminTaskSelects() {
+        const tasks = await API.getTasks();
+        ['results-task-select','qerror-task-select','analysis-task-select'].forEach(id => {
+            const sel = document.getElementById(id);
+            if(!sel) return;
+            sel.innerHTML = '<option value="">-- 選擇任務 --</option>';
+            tasks.forEach(t => { const o=document.createElement('option'); o.value=t; o.textContent=t; sel.appendChild(o); });
+        });
+    }
+
+    async function saveQuizSettings() {
+        const count = document.getElementById('setting-quiz-count').value;
+        if(!count||count<1) return Swal.fire('錯誤','題數至少要 1 題！','warning');
+        Swal.fire({title:'儲存中...',didOpen:()=>Swal.showLoading()});
+        const msg = await API.updateQuizSettings(count);
+        Swal.fire('成功',msg,'success');
+    }
+
+    function processExcel() {
+        const fileInput = document.getElementById('excel-file');
+        const taskName = document.getElementById('new-task-name').value;
+        const grade = document.getElementById('task-grade').value;
+        if(!fileInput.files.length||!taskName) return Swal.fire('錯誤','請選擇檔案並輸入任務名稱','warning');
+        Swal.fire({title:'讀取與解析中...',didOpen:()=>Swal.showLoading()});
+        const reader = new FileReader();
+        reader.onload = async e => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const wb = XLSX.read(data,{type:'array'});
+                const jsonData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1});
+                let extracted=[], nodesSet=new Set();
+                for(let i=1;i<jsonData.length;i++) {
+                    const row=jsonData[i];
+                    if(!row||!row.length) continue;
+                    const seat=String(row[0]||'').trim(), name=String(row[1]||'').trim();
+                    const acc=String(row[2]||'').trim(), rawNode=String(row[3]||'').trim();
+                    const validNode = /\d/.test(rawNode) ? rawNode : '';
+                    if(name) extracted.push({seatNo:seat,name,accuracy:acc,weakNodes:validNode});
+                    if(validNode) nodesSet.add(validNode);
+                }
+                globalUniqueNodes = Array.from(nodesSet).filter(n=>n.length>0);
+                Swal.fire({title:'上傳中...',didOpen:()=>Swal.showLoading()});
+                await API.uploadTaskData(taskName, grade, extracted, globalUniqueNodes);
+                Swal.fire({title:'完成',text:'學生名單建立成功！',icon:'success',showCancelButton:true,confirmButtonText:'留在後台（擴充題庫）',cancelButtonText:'回到首頁'})
+                    .then(r=>{ if(!r.isConfirmed) switchView('view-login'); });
+                if(globalUniqueNodes.length>0) {
+                    document.getElementById('ai-generation-panel').style.display='block';
+                    document.getElementById('weak-count').innerText = globalUniqueNodes.length;
+                    document.getElementById('weak-list').innerText = globalUniqueNodes.join(', ');
+                }
+            } catch(err) { Swal.fire('解析失敗','請確認是有效的 Excel 檔。','error'); }
+        };
+        reader.readAsArrayBuffer(fileInput.files[0]);
+    }
+
+    async function triggerAIGeneration() {
+        const grade = document.getElementById('task-grade').value;
+        const btn = document.getElementById('btn-ai-generate');
+        const progressPanel = document.getElementById('ai-progress-panel');
+        const progressBar = document.getElementById('ai-progress-bar');
+        const progressCount = document.getElementById('progress-count');
+        const progressTitle = document.getElementById('progress-title');
+        const batchLog = document.getElementById('batch-log');
+
+        btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 生成中，請稍候...';
+        progressPanel.style.display = 'block'; progressBar.style.width = '0%';
+        progressCount.textContent = '計算中...'; batchLog.innerHTML = '';
+
+        try {
+            let batchIndex = 0; let totalBatches = null; let totalAdded = 0;
+            while (true) {
+                progressTitle.textContent = `🤖 第 ${batchIndex+1} 批次命題中...`;
+                const result = await API.generateBatch(globalUniqueNodes, grade, batchIndex);
+                if (totalBatches === null) totalBatches = result.total;
+                totalAdded += (result.addedThisBatch || 0);
+                progressBar.style.width = Math.round((result.current / result.total) * 100) + '%';
+                progressCount.textContent = `${result.current} / ${result.total} 批`;
+                const logItem = document.createElement('div'); logItem.className = 'batch-log-item';
+                logItem.innerHTML = `✅ ${escapeHtml(result.message)}`;
+                batchLog.appendChild(logItem); batchLog.scrollTop = batchLog.scrollHeight;
+                if (result.done) break;
+                batchIndex++;
+            }
+            progressBar.classList.remove('progress-bar-animated');
+            progressTitle.textContent = '🎉 全部完成！';
+            Swal.fire({ title:'題庫擴充完成！', html:`<p>共完成 <b>${totalBatches}</b> 批次，新增 <b>${totalAdded}</b> 題！</p>`, icon:'success', showCancelButton:true, confirmButtonText:'留在後台', cancelButtonText:'回到首頁' }).then(r=>{
+                document.getElementById('ai-generation-panel').style.display='none';
+                progressPanel.style.display='none';
+                if(!r.isConfirmed) switchView('view-login');
+            });
+        } catch(err) {
+            btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> 重試 AI 批次擴充題庫';
+            progressBar.classList.remove('progress-bar-animated'); progressBar.classList.add('bg-danger');
+            Swal.fire('生成失敗', err.message || String(err), 'error');
+        }
+    }
+
+    async function loadStudents() {
+        const task = document.getElementById('task-select').value;
+        const sel = document.getElementById('student-select');
+        if(!task){sel.disabled=true;return;}
+        sel.disabled=false; sel.innerHTML='<option value="">載入中...</option>';
+        const students = await API.getStudents(task);
+        sel.innerHTML='<option value="">-- 請選擇你的名字 --</option>';
+        students.forEach((s,i)=>{
+            const o=document.createElement('option'); o.value=i; o.textContent=`${s.seatNo}號 - ${s.name}`;
+            o.dataset.student=JSON.stringify(s); sel.appendChild(o);
+        });
+    }
+
+    function getSelectedStudent() {
+        const sel = document.getElementById('student-select');
+        const opt = sel.options[sel.selectedIndex];
+        if(!opt||!opt.dataset.student) return null;
+        return JSON.parse(opt.dataset.student);
+    }
+
+    async function startQuiz() {
+        const student = getSelectedStudent();
+        if(!student) return Swal.fire('錯誤','請選擇姓名','warning');
+        const taskName = document.getElementById('task-select').value;
+        document.getElementById('quiz-student-name').innerText=`${student.name} 的魔法挑戰`;
+        Swal.fire({title:'抓取專屬題庫中...',didOpen:()=>Swal.showLoading()});
+        const [fetchedQ, settings] = await Promise.all([API.generateQuiz(student.weakNode,taskName), API.getQuizSettings()]);
+        currentQuestions=fetchedQ; Swal.close();
+        if(!currentQuestions.length) return Swal.fire('提示','目前沒有適合的題目，請老師至後台擴充！','info');
+        currentIdx=0; userAnswers={}; secondsElapsed=0;
+        quizTimer=setInterval(()=>{
+            secondsElapsed++;
+            document.getElementById('timer').innerText=`${String(Math.floor(secondsElapsed/60)).padStart(2,'0')}:${String(secondsElapsed%60).padStart(2,'0')}`;
+        },1000);
+        renderQuestion(); switchView('view-quiz'); setTimeout(resizeCanvas,100);
+    }
+
+    function renderQuestion() {
+        const q = currentQuestions[currentIdx];
+        const container = document.getElementById('question-container');
+        container.innerHTML='';
+
+        const meta = document.createElement('div');
+        meta.className='d-flex align-items-center gap-2 mb-3 flex-wrap';
+        meta.innerHTML=`<span class="text-muted small">題號 ${currentIdx+1} / ${currentQuestions.length}</span><span class="q-type-badge ${q.type==='single'?'q-type-single':'q-type-fill'}">${q.type==='single'?'📋 選擇題':'✏️ 填充題'}</span><span class="badge ${q.difficulty==='easy'?'badge-easy':q.difficulty==='hard'?'badge-hard':'badge-medium'}">${q.difficulty==='easy'?'⭐ 基礎':q.difficulty==='hard'?'🔥 挑戰':'💡 中等'}</span>`;
+        container.appendChild(meta);
+
+        const qText = document.createElement('h5'); qText.className='mb-4 lh-base'; qText.textContent=q.text;
+        container.appendChild(qText);
+
+        if(q.type==='single') {
+            const prefixes=['A','B','C','D','E'];
+            const opts = Array.isArray(q.options) ? q.options : (()=>{try{return JSON.parse(q.options||'[]');}catch(e){return [];}})();
+            opts.forEach((opt,i)=>{
+                const btn=document.createElement('button');
+                btn.className='option-btn'+(userAnswers[q.id]===opt?' selected':'');
+                btn.innerHTML=`<span class="option-prefix">${prefixes[i]||String(i+1)}</span><span>${escapeHtml(opt)}</span>`;
+                btn.dataset.value=opt;
+                btn.addEventListener('click',function(){
+                    container.querySelectorAll('.option-btn').forEach(b=>b.classList.remove('selected'));
+                    this.classList.add('selected'); userAnswers[q.id]=this.dataset.value;
+                });
+                container.appendChild(btn);
+            });
+        } else {
+            const hint=document.createElement('p'); hint.className='text-muted small mb-2'; hint.textContent='💡 請直接輸入數字或計算結果'; container.appendChild(hint);
+            const input=document.createElement('input'); input.type='text'; input.className='fill-input'; input.placeholder='在這裡輸入你的答案...'; input.value=userAnswers[q.id]||'';
+            input.addEventListener('input',function(){ userAnswers[q.id]=this.value; });
+            input.addEventListener('keydown',function(e){ if(e.key==='Enter') navQuestion(1); });
+            container.appendChild(input); setTimeout(()=>input.focus(),100);
+        }
+
+        document.getElementById('quiz-progress').style.width=`${(currentIdx/currentQuestions.length)*100}%`;
+        document.getElementById('btn-prev').disabled=currentIdx===0;
+        document.getElementById('btn-next').style.display=currentIdx===currentQuestions.length-1?'none':'block';
+        document.getElementById('btn-submit').style.display=currentIdx===currentQuestions.length-1?'block':'none';
+    }
+
+    function navQuestion(dir) {
+        if(dir===1 && !String(userAnswers[currentQuestions[currentIdx].id]||'').trim()) return Swal.fire('⚠️ 尚未作答','請先選擇或輸入答案！','warning');
+        currentIdx+=dir; renderQuestion(); document.getElementById('view-quiz').scrollIntoView({behavior:'smooth'});
+    }
+
+    async function submitQuiz() {
+        const unanswered=[]; currentQuestions.forEach((q,i)=>{ if(!String(userAnswers[q.id]||'').trim()) unanswered.push(i+1); });
+        if(unanswered.length) return Swal.fire('⚠️ 尚未完成',`第 ${unanswered.join(', ')} 題還沒填寫！`,'warning');
+        clearInterval(quizTimer);
+        let score=0, details=[];
+        currentQuestions.forEach(q=>{
+            const uAns=normalizeAnswer(userAnswers[q.id]), cAns=normalizeAnswer(q.answer), correct=uAns===cAns;
+            if(correct) score+=100/currentQuestions.length;
+            details.push({id:q.id,node:q.node,questionText:q.text,userAns:userAnswers[q.id],correctAns:q.answer,displayCorrectAns:q.displayAnswer||q.answer,isCorrect:correct});
+        });
+        score=Math.round(score);
+
+        const wrongs = details.filter(d=>!d.isCorrect), corrects = details.filter(d=>d.isCorrect);
+        let html = `<div class="text-center mb-3"><span style="font-size:3rem;font-weight:bold;color:${score>=60?'#43a047':'#e53935'}">${score} 分</span><div class="mt-1 text-muted small">答對 ${corrects.length} 題 ／ 答錯 ${wrongs.length} 題</div></div><div style="max-height:55vh;overflow-y:auto;border:1px solid #e0e0e0;border-radius:10px;padding:8px;">`;
+        details.forEach((d, idx) => {
+            const showCorrect = d.displayCorrectAns || d.correctAns, showUser = d.userAns || '（未作答）', showQ = d.questionText ? escapeHtml(d.questionText) : `第 ${idx+1} 題`;
+            if(d.isCorrect) html += `<div class="mb-2 p-2 rounded" style="background:#f0fff4;border-left:4px solid #43a047;"><div class="small text-muted mb-1">${idx+1}. ${showQ}</div><span class="text-success fw-bold">✅ 你答：${escapeHtml(showUser)}</span></div>`;
+            else html += `<div class="mb-2 p-2 rounded" style="background:#fff5f5;border-left:4px solid #e53935;"><div class="small text-muted mb-1">${idx+1}. ${showQ}</div><div>❌ 你答：<b class="text-danger">${escapeHtml(showUser)}</b></div><div>✅ 正解：<b class="text-success">${escapeHtml(showCorrect)}</b></div></div>`;
+        });
+        html += `</div>`; if(wrongs.length===0) html += `<p class="text-success fw-bold text-center mt-2">🎉 全部答對！太厲害了！</p>`;
+
+        Swal.fire({title:'成績結算中...',allowOutsideClick:false,didOpen:()=>Swal.showLoading()});
+        const student=getSelectedStudent();
+        await API.submitQuizResult({ taskName:document.getElementById('task-select').value, seatNo:student.seatNo, name:student.name, score, timeSpent:secondsElapsed, details });
+        Swal.fire({title:'挑戰完成！',html,icon:score>=60?'success':'info',confirmButtonText:'回首頁'}).then(()=>switchView('view-login'));
+    }
+
+    async function loadAdminResults() {
+        const taskName = document.getElementById('results-task-select').value;
+        const container = document.getElementById('results-table-container'), summary = document.getElementById('results-summary');
+        if(!taskName) { container.innerHTML='<p class="text-muted text-center py-4">請先選擇任務</p>'; summary.textContent=''; return; }
+        container.innerHTML='<p class="text-center text-muted py-3"><i class="fa-solid fa-spinner fa-spin"></i> 載入中...</p>';
+        const results = await API.getTaskResults(taskName);
+        if(!results.length) { container.innerHTML='<p class="text-center text-muted py-4">此任務尚無作答記錄</p>'; return; }
+        summary.textContent = `共 ${results.length} 人作答，班級平均 ${Math.round(results.reduce((s,r)=>s+r.score,0)/results.length)} 分`;
+        let html = `<div class="table-responsive"><table class="table table-hover results-table align-middle"><thead><tr><th>座號</th><th>姓名</th><th>分數</th><th>作答時間</th><th>繳交時間</th><th>詳細作答</th></tr></thead><tbody>`;
+        results.forEach((r,idx) => {
+            const scoreClass = r.score>=80?'score-high':r.score>=60?'score-mid':'score-low';
+            const timeStr = Math.floor(r.timeSpent/60)>0 ? `${Math.floor(r.timeSpent/60)}分${r.timeSpent%60}秒` : `${r.timeSpent%60}秒`;
+            html += `<tr><td>${escapeHtml(r.seatNo)}</td><td><b>${escapeHtml(r.name)}</b></td><td><span class="${scoreClass}">${r.score} 分</span></td><td>${timeStr}</td><td class="text-muted small">${escapeHtml(r.submittedAt)}</td><td><button class="btn btn-outline-primary btn-sm detail-btn" onclick="toggleDetail(${idx})"><i class="fa-solid fa-list-check"></i> 查看</button></td></tr><tr id="detail-row-${idx}" class="detail-row" style="display:none;"><td colspan="6"><div class="p-2">${buildDetailHtml(r.details)}</div></td></tr>`;
+        });
+        container.innerHTML = html + '</tbody></table></div>';
+    }
+
+    function toggleDetail(idx) { const row = document.getElementById('detail-row-'+idx); row.style.display = row.style.display==='none' ? 'table-row' : 'none'; }
+    function buildDetailHtml(details) {
+        if(!details||!details.length) return '<p class="text-muted small mb-0">無作答明細</p>';
+        let html = '<div style="display:grid;gap:6px;">';
+        details.forEach((d,i) => {
+            const showCorrect = d.displayCorrectAns || d.correctAns, qText = d.questionText || `第${i+1}題`;
+            if(d.isCorrect) html += `<div class="p-2 rounded" style="background:#f0fff4;border-left:3px solid #43a047;font-size:.82rem;"><span class="text-muted">${i+1}.</span> ${escapeHtml(qText)}<span class="text-success ms-2">✅ ${escapeHtml(d.userAns)}</span></div>`;
+            else html += `<div class="p-2 rounded" style="background:#fff5f5;border-left:3px solid #e53935;font-size:.82rem;"><span class="text-muted">${i+1}.</span> ${escapeHtml(qText)}<br><span class="text-danger">❌ 學生答：<b>${escapeHtml(d.userAns||'未作答')}</b></span><span class="text-success ms-3">✅ 正解：<b>${escapeHtml(showCorrect)}</b></span></div>`;
+        });
+        return html + '</div>';
+    }
+
+    async function loadQuestionErrors() {
+        const taskName = document.getElementById('qerror-task-select').value;
+        const container = document.getElementById('qerror-container'), summary = document.getElementById('qerror-summary');
+        if(!taskName) { container.innerHTML='<p class="text-muted text-center py-4">請先選擇任務</p>'; summary.textContent=''; return; }
+        container.innerHTML='<p class="text-center text-muted py-3"><i class="fa-solid fa-spinner fa-spin"></i> 統計中...</p>';
+        const qData = await API.getQuestionErrorRates(taskName);
+        if(!qData.length) { container.innerHTML='<p class="text-center text-muted py-4">此任務尚無資料</p>'; return; }
+        summary.textContent = `共 ${qData.length} 題`;
+        let html = `<div class="row g-2 mb-3"><div class="col-4"><div class="card text-center p-2"><div class="fw-bold text-danger fs-5">${qData.filter(q=>q.wrongRate>=60).length}</div><div class="small text-muted">高錯誤率（≥60%）</div></div></div><div class="col-4"><div class="card text-center p-2"><div class="fw-bold text-warning fs-5">${Math.round(qData.reduce((s,q)=>s+q.wrongRate,0)/qData.length)}%</div><div class="small text-muted">全班平均錯誤率</div></div></div><div class="col-4"><div class="card text-center p-2"><div class="fw-bold text-primary fs-5">${qData.length}</div><div class="small text-muted">題目總數</div></div></div></div><div class="table-responsive"><table class="table table-hover results-table align-middle"><thead><tr><th style="width:40%">題目內容</th><th>節點</th><th>正解</th><th>錯誤人數</th><th>錯誤率</th><th>常見錯誤答案</th></tr></thead><tbody>`;
+        qData.forEach((q) => {
+            const rateColor = q.wrongRate>=70?'#e53935':q.wrongRate>=40?'#fb8c00':'#43a047';
+            const ansCount = {}; q.wrongAnswers.forEach(w=>{ ansCount[w.ans]=(ansCount[w.ans]||0)+1; });
+            const topWrong = Object.entries(ansCount).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([ans,cnt])=>`<span class="badge bg-danger me-1">${escapeHtml(ans)} (${cnt}人)</span>`).join('');
+            html += `<tr><td class="small">${escapeHtml(q.questionText)}</td><td><span class="badge bg-secondary">${escapeHtml(q.node)}</span></td><td class="text-success small fw-bold">${escapeHtml(q.correctAns)}</td><td class="text-center"><b>${q.wrong}</b>/${q.total}</td><td><div class="d-flex align-items-center gap-2"><div style="flex:1;background:#f5f5f5;border-radius:6px;height:12px;overflow:hidden;"><div style="width:${q.wrongRate}%;height:100%;background:${rateColor};border-radius:6px;"></div></div><span style="color:${rateColor};font-weight:bold;">${q.wrongRate}%</span></div></td><td class="small">${topWrong||'<span class="text-muted">無</span>'}</td></tr>`;
+        });
+        container.innerHTML = html + '</tbody></table></div>';
+    }
+
+    let _currentAnalysisGrade = '五年級', _topWrongNodes = [];
+    async function loadClassAnalysis() {
+        const taskName = document.getElementById('analysis-task-select').value;
+        const container = document.getElementById('analysis-container'), badge = document.getElementById('analysis-grade-badge');
+        if(!taskName) { container.innerHTML='<p class="text-muted text-center py-4">請先選擇任務</p>'; return; }
+        container.innerHTML='<p class="text-center text-muted py-3"><i class="fa-solid fa-spinner fa-spin"></i> 分析中...</p>';
+        document.getElementById('worksheet-container').style.display='none';
+        const analysis = await API.analyzeClassWeakNodes(taskName);
+        if(!analysis.length) { container.innerHTML='<p class="text-center text-muted py-4">此任務尚無資料</p>'; return; }
+        
+        _topWrongNodes = analysis.slice(0,5).map(a=>a.node);
+        let html = `<div class="mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2"><h6 class="fw-bold mb-0">📊 全班節點錯誤率排行</h6><button class="btn btn-success btn-sm" onclick="generateWorksheet()"><i class="fa-solid fa-wand-magic-sparkles"></i> AI 生成前 ${Math.min(3,_topWrongNodes.length)} 大弱點教學講義</button></div>`;
+        analysis.forEach((a,i) => {
+            const barColor = a.wrongRate>=70?'#e53935':a.wrongRate>=40?'#fb8c00':'#43a047';
+            html += `<div class="node-card card p-3"><div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-1"><span class="fw-bold">${i<3?['🥇','🥈','🥉'][i]:`${i+1}.`} 節點：${escapeHtml(a.node)}</span><span class="badge" style="background:${barColor}">${a.wrongCount}/${a.studentCount} 人答錯（${a.wrongRate}%）</span></div><div class="node-bar-wrap mb-2"><div class="node-bar" style="width:${a.wrongRate}%;background:${barColor}"></div></div><div class="small text-muted">答錯學生：${a.students.map(escapeHtml).join('、')}</div></div>`;
+        });
+        container.innerHTML = html;
+    }
+
+    async function generateWorksheet() {
+        if(!_topWrongNodes.length) return Swal.fire('提示','請先完成分析','info');
+        const topNodes = _topWrongNodes.slice(0,3);
+        const wsContainer = document.getElementById('worksheet-container'), wsContent = document.getElementById('worksheet-content');
+        wsContainer.style.display='block'; wsContent.innerHTML='<p class="text-center text-muted py-3"><i class="fa-solid fa-spinner fa-spin"></i> AI 正在生成教學講義...</p>';
+        wsContainer.scrollIntoView({behavior:'smooth'});
+        try {
+            const questions = await API.generateTeachingWorksheet(topNodes, _currentAnalysisGrade);
+            const today = new Date().toLocaleDateString('zh-TW'), groups = {};
+            questions.forEach(q => { const n = q.node||'其他'; if(!groups[n]) groups[n]=[]; groups[n].push(q); });
+            let globalIdx = 0, nodeBlocks = '';
+            Object.entries(groups).forEach(([node, qs]) => {
+                let problems = '';
+                qs.forEach(q => {
+                    globalIdx++;
+                    problems += `<div class="ws-problem-item" style="margin-bottom:18px;padding-bottom:14px;border-bottom:1px dashed #ccc;"><div style="background:#fff8e1;border-left:4px solid #f9a825;padding:7px 10px;border-radius:3px;font-size:10pt;margin-bottom:8px;color:#555;">&#9312; 步驟提示：${escapeHtml(q.step||'')}</div><div style="font-size:12pt;font-weight:bold;margin-bottom:10px;">${globalIdx}. ${escapeHtml(q.text||'')}</div><table style="width:100%;border-collapse:collapse;font-size:10pt;color:#444;"><tr><td style="width:50%;padding:4px 0;">列式：<span style="display:inline-block;min-width:160px;border-bottom:1.5px solid #333;margin-left:6px;">&nbsp;</span></td><td style="width:50%;padding:4px 0;">答案：<span style="display:inline-block;min-width:100px;border-bottom:1.5px solid #333;margin-left:6px;">&nbsp;</span><span style="color:#1b5e20;font-size:9pt;margin-left:8px;">（正解：${escapeHtml(q.answer||'')}）</span></td></tr></table><div style="background:#e3f2fd;border-left:4px solid #1976d2;padding:5px 10px;border-radius:3px;font-size:9.5pt;color:#0d47a1;margin-top:8px;">&#128161; ${escapeHtml(q.hint||'')}</div></div>`;
+                });
+                nodeBlocks += `<div class="ws-node-block" style="margin-bottom:20px;"><div style="background:#1565c0;color:#fff;padding:8px 14px;border-radius:6px 6px 0 0;font-size:12pt;font-weight:bold;">&#128204; 知識節點：${escapeHtml(node)}</div><div style="border:1.5px solid #1565c0;border-top:none;border-radius:0 0 6px 6px;padding:16px 14px 4px;">${problems}</div></div>`;
+            });
+            wsContent.innerHTML = `<div id="printable-worksheet" style="font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;max-width:760px;margin:0 auto;"><div style="text-align:center;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #1565c0;"><div style="font-size:16pt;font-weight:bold;color:#1565c0;margin-bottom:4px;">車城國小 ${_currentAnalysisGrade} 差異化補救教學練習卷</div><div style="font-size:10pt;color:#555;margin-bottom:8px;">弱點節點：${topNodes.map(escapeHtml).join('、')}　　出卷日期：${today}</div><table style="width:100%;max-width:500px;margin:0 auto;font-size:11pt;border-collapse:collapse;"><tr><td style="padding:3px 12px;">班級：<span style="display:inline-block;min-width:80px;border-bottom:1.5px solid #333;">&nbsp;</span></td><td style="padding:3px 12px;">座號：<span style="display:inline-block;min-width:60px;border-bottom:1.5px solid #333;">&nbsp;</span></td><td style="padding:3px 12px;">姓名：<span style="display:inline-block;min-width:100px;border-bottom:1.5px solid #333;">&nbsp;</span></td></tr></table></div>${nodeBlocks}<div style="text-align:center;font-size:9pt;color:#999;margin-top:10px;padding-top:8px;border-top:1px solid #eee;">✦ 本練習卷由 AI 根據全班共同弱點自動生成，僅供課堂輔助教學使用 ✦</div></div><div class="alert alert-info small mt-3 d-print-none" style="max-width:760px;margin:8px auto 0;"><i class="fa-solid fa-print"></i> 點上方「列印講義」按鈕，將開啟新視窗並自動列印 A4 格式。</div>`;
+            
+            // 儲存供
