@@ -408,6 +408,7 @@ function createAnswerDetail(question, userAnswer) {
     userAns:          userAnswer || '',
     correctAns:       normCorrect,
     displayCorrectAns: question.displayAnswer || question.answer || '',
+    hint:             question.hint || '',  // ★ 保存 hint 供答錯時顯示
     isCorrect
   };
 }
@@ -433,17 +434,8 @@ window.addEventListener('load', async () => {
   initCanvas();
   document.getElementById('setting-gas-url').value = GAS_API_URL;
 
-  // 未設定 URL 時顯示提示，不彈視窗、不發出 API 請求
-  if (!GAS_API_URL) {
-    const noUrl = `<div class="alert alert-warning py-2">
-      ⚙️ 尚未設定 GAS API 網址，請先至<strong>教師後台 → 設定</strong>填入 Web App 網址。
-    </div>`;
-    document.getElementById('task-select').outerHTML =
-      `<div id="task-select-placeholder">${noUrl}</div>`;
-    document.getElementById('student-select').closest('.mb-4').style.display = 'none';
-    document.querySelector('#view-login .btn-primary').disabled = true;
-    return;
-  }
+  // 未設定 URL 時靜默跳過，不阻擋畫面；可至教師後台→設定填入
+  if (!GAS_API_URL) return;
 
   try {
     _allTasks = await API.getTasks();
@@ -620,12 +612,14 @@ function showStudentResult(score, correct, total, timeSpent, details) {
     }
     let wrongHint = '';
     if (!d.isCorrect) {
+      // 顯示解題 hint（若題目有附）
+      const hintHtml = d.hint ? `<div class="mt-1 small" style="color:#7b1fa2">💡 提示：${d.hint}</div>` : '';
       let ca = d.displayCorrectAns || d.correctAns;
       if (d.type==='single' && d.options && d.options.length>0) {
         const ci = d.options.indexOf(ca);
         if (ci>=0) ca = `${LABELS[ci]}. ${ca}`;
       }
-      wrongHint = `<div class="mt-1 small text-success">✔ 正確答案：<strong>${ca}</strong></div>`;
+      wrongHint = hintHtml + `<div class="mt-1 small text-success">✔ 正確答案：<strong>${ca}</strong></div>`;
     }
     html += `<div class="${cls}">
       <div><span class="me-1">${d.isCorrect?'✅':'❌'}</span><strong>第${i+1}題</strong>
@@ -799,7 +793,11 @@ async function loadClassAnalysis() {
   ws.style.display='none'; _worksheetCache=null;
 
   try {
-    const nodes = await API.analyzeClassWeakNodes(taskName);
+    // ★ 同時抓弱點節點與各題錯誤率，用以在節點卡片顯示具體題目
+    const [nodes, qErrors] = await Promise.all([
+      API.analyzeClassWeakNodes(taskName),
+      API.getQuestionErrorRates(taskName)
+    ]);
     if (!nodes.length) {
       el.innerHTML='<p class="text-muted">尚無足夠資料。請先讓學生完成測驗，且題目需包含知識節點資訊。</p>';
       return;
@@ -807,10 +805,31 @@ async function loadClassAnalysis() {
     const task = (_allTasks||[]).find(t=>t.name===taskName)||{};
     _analysisCache = { grade:task.grade||'五年級', subject:task.subject||'數學', nodes:nodes.map(n=>n.node) };
 
+    // 建立 node → 錯題清單 對照表
+    const nodeQuestions = {};
+    qErrors.forEach(q => {
+      if (q.node) {
+        if (!nodeQuestions[q.node]) nodeQuestions[q.node]=[];
+        nodeQuestions[q.node].push(q);
+      }
+    });
+
     let html = '';
     nodes.forEach((n,i) => {
       const bc = n.wrongRate>=70?'#e53935':n.wrongRate>=40?'#fb8c00':'#43a047';
       const tags = n.students.map(s=>`<span class="node-student-tag">${s}</span>`).join('');
+      const relQs = (nodeQuestions[n.node]||[]).slice(0,5);
+      const qRows = relQs.map((q,qi)=>
+        `<div class="mb-2 p-2" style="background:#fafafa;border-radius:6px;font-size:.82rem;border-left:3px solid ${q.wrongRate>=70?'#e53935':'#fb8c00'}">
+          <strong>${qi+1}.</strong>（錯誤率 ${q.wrongRate}%）${q.questionText}
+          <div class="text-success small">✔ 答案：${q.correctAns}</div>
+         </div>`
+      ).join('');
+      const qHtml = relQs.length
+        ? `<details class="mt-2"><summary class="small text-primary" style="cursor:pointer;user-select:none">
+            📋 該節點相關錯題（${relQs.length} 題）</summary>
+            <div class="mt-2">${qRows}</div></details>`
+        : '';
       html += `<div class="node-card">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-1 mb-2">
           <div><span class="badge bg-danger me-2">#${i+1}</span><span class="node-title">${n.node}</span></div>
@@ -821,6 +840,7 @@ async function loadClassAnalysis() {
         </div>
         <div class="progress mb-2" style="height:6px"><div class="progress-bar" style="width:${n.wrongRate}%;background:${bc}"></div></div>
         <div class="small text-muted mb-1">需加強的學生：</div>${tags}
+        ${qHtml}
       </div>`;
     });
     el.innerHTML = html;
@@ -1002,24 +1022,52 @@ async function triggerAIGeneration() {
   const grade   = document.getElementById('task-grade').value;
   const subject = document.getElementById('task-subject').value;
   const fid     = document.getElementById('pdf-folder-id').value.trim();
-  const BATCH_SIZE=5, total=Math.ceil(globalUniqueNodes.length/BATCH_SIZE);
-  let idx=0;
+  // ★ 每批改為3個節點，減少單次 Prompt 長度，降低超時機率
+  const BATCH_SIZE=3, total=Math.ceil(globalUniqueNodes.length/BATCH_SIZE);
+  let idx=0, retryCount=0, MAX_RETRY=4;
   const logEl = document.getElementById('batch-log');
   logEl.innerHTML='';
 
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
   const next=async()=>{
-    document.getElementById('progress-title').textContent=`命題中：第 ${idx+1}/${total} 批`;
+    document.getElementById('progress-title').textContent=
+      retryCount>0
+        ? `⏳ 第 ${idx+1}/${total} 批重試中（第${retryCount}次）...`
+        : `命題中：第 ${idx+1}/${total} 批`;
     try {
       let res;
       if (currentSource!=='ai'&&fid) res=await API.generateBatchFromFolder(fid, globalUniqueNodes, grade, subject, idx, currentSource);
       else res=await API.generateBatch(globalUniqueNodes, grade, subject, idx);
 
+      retryCount=0; // 成功後重置重試計數
       document.getElementById('ai-progress-bar').style.width=Math.round(((idx+1)/total)*100)+'%';
       logEl.innerHTML=`<div>${res.message}</div>`+logEl.innerHTML;
       idx++;
-      if (!res.done&&idx<total) setTimeout(next, 800);
-      else { Swal.fire('完成🎉','題庫擴充完成！','success'); btn.disabled=false; document.getElementById('progress-title').textContent='完成！'; }
-    } catch(e) { Swal.fire('錯誤',e.message,'error'); btn.disabled=false; }
+      if (!res.done&&idx<total) setTimeout(next, 1200);
+      else { Swal.fire('完成🎉',`題庫擴充完成！共 ${total} 批`,'success'); btn.disabled=false; document.getElementById('progress-title').textContent='完成！'; }
+    } catch(e) {
+      const isRetryable = /high demand|quota|503|overload|unavailable/i.test(e.message);
+      if (isRetryable && retryCount < MAX_RETRY) {
+        retryCount++;
+        const wait = retryCount * 15; // 15、30、45、60 秒遞增等待
+        logEl.innerHTML=`<div class="text-warning">⚠️ 第${idx+1}批遇到流量限制，${wait}秒後自動重試（${retryCount}/${MAX_RETRY}）...</div>`+logEl.innerHTML;
+        document.getElementById('progress-title').textContent=`等待重試 ${wait}s...`;
+        await sleep(wait * 1000);
+        next(); // 不遞增 idx，重試同一批
+      } else {
+        logEl.innerHTML=`<div class="text-danger">❌ 第${idx+1}批失敗：${e.message}</div>`+logEl.innerHTML;
+        // 跳過此批繼續下一批，不中斷整體流程
+        retryCount=0; idx++;
+        if (idx < total) {
+          await sleep(3000);
+          next();
+        } else {
+          Swal.fire('部分完成','有批次失敗，其餘已完成，可再次點擊補充','warning');
+          btn.disabled=false;
+        }
+      }
+    }
   };
   next();
 }
