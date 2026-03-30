@@ -90,7 +90,7 @@
 <header class="app-header">
   <div class="container text-center">
     <h2><i class="fa-solid fa-graduation-cap me-2"></i>車城國小｜學力檢測 AI 智慧補救系統</h2>
-    <p>數學科 × 國語科 ｜ Gemini AI 差異化出題 ｜ PDF 教材出題 ｜ 弱點節點精準補救（內容僅供參考特別是國語科）</p>
+    <p>數學科 × 國語科 ｜ Gemini AI 差異化出題 ｜ PDF 教材出題 ｜ 弱點節點精準補救（內容僅供參考）</p>
   </div>
 </header>
 
@@ -917,28 +917,61 @@ async function processExcel() {
   const reader = new FileReader();
   reader.onload = async e => {
     try {
-      const wb      = XLSX.read(e.target.result, {type:'binary'});
-      const ws      = wb.Sheets[wb.SheetNames[0]];
-      const raw     = XLSX.utils.sheet_to_json(ws, {header:1});
-      const headers = raw[0]||[];
+      const wb  = XLSX.read(e.target.result, {type:'binary'});
+      const ws  = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if (!raw.length) return Swal.fire('錯誤','Excel 內容為空','error');
 
-      const seatIdx = headers.findIndex(h=>String(h).includes('座'));
-      const nameIdx = headers.findIndex(h=>String(h).includes('姓名'));
-      const accIdx  = headers.findIndex(h=>String(h).includes('答對率')||String(h).includes('準確'));
-      const nodeIdx = headers.findIndex(h=>String(h).includes('弱點')||String(h).includes('節點'));
-
-      if (nameIdx<0) return Swal.fire('格式錯誤','Excel 需有「姓名」欄位','error');
+      const row1    = raw[0] || [];
+      // 格式A：學力檢測匯出（第1欄標題為「學生」，3行標題）
+      const isTypeA = String(row1[0]||'').trim() === '學生';
 
       const studentData=[], nodeSet=new Set();
-      raw.slice(1).forEach(row=>{
-        const name=String(row[nameIdx]||'').trim();
-        if (!name) return;
-        const seat  = seatIdx>=0 ? String(row[seatIdx]||'') : '';
-        const acc   = accIdx>=0  ? String(row[accIdx]||'')  : '';
-        const nodes = nodeIdx>=0 ? String(row[nodeIdx]||'') : '';
-        studentData.push({seatNo:seat, name, accuracy:acc, weakNodes:nodes});
-        nodes.split(/[,，、\s]+/).map(n=>n.trim()).filter(n=>n&&/\d/.test(n)).forEach(n=>nodeSet.add(n));
-      });
+
+      if (isTypeA) {
+        // 找出所有節點欄（row1 中含 '/' 的欄），節點答對率在 colIdx+7
+        const nodeColMap = [];
+        row1.forEach((cell, i) => {
+          const s = String(cell||'');
+          if (s.includes('/') && s.length > 3)
+            nodeColMap.push({ colIdx: i+7, nodeName: s.split('/').pop().trim() });
+        });
+
+        raw.slice(3).forEach(row => {                        // 跳過3行標題
+          const sc = String(row[0]||'').trim();
+          if (!sc) return;
+          const m = sc.match(/(\d+)\s*號\s*(.+)$/);         // 解析「X號 姓名」
+          if (!m) return;
+          const seatNo = m[1].trim(), name = m[2].trim();
+          const overallAcc = row[3] !== '' ? String(row[3]) : '';
+          // 弱點 = 答對率 < 60
+          const weakList = nodeColMap
+            .filter(nc => { const a=parseFloat(row[nc.colIdx]); return !isNaN(a) && a < 60; })
+            .map(nc => nc.nodeName);
+          nodeColMap.forEach(nc => {
+            const a=parseFloat(row[nc.colIdx]);
+            if (!isNaN(a)) nodeSet.add(nc.nodeName);
+          });
+          studentData.push({ seatNo, name, accuracy: overallAcc, weakNodes: weakList.join('、') });
+        });
+
+      } else {
+        // 格式B：一般格式（含「姓名」欄）
+        const nameIdx = row1.findIndex(h=>String(h).includes('姓名'));
+        const seatIdx = row1.findIndex(h=>String(h).includes('座'));
+        const accIdx  = row1.findIndex(h=>String(h).includes('答對率')||String(h).includes('準確'));
+        const nodeIdx = row1.findIndex(h=>String(h).includes('弱點')||String(h).includes('節點'));
+        if (nameIdx<0) return Swal.fire('格式錯誤','Excel 需有「姓名」欄，或使用學力檢測匯出格式','error');
+        raw.slice(1).forEach(row=>{
+          const name=String(row[nameIdx]||'').trim();
+          if (!name) return;
+          const seat  = seatIdx>=0 ? String(row[seatIdx]||'') : '';
+          const acc   = accIdx>=0  ? String(row[accIdx]||'')  : '';
+          const nodes = nodeIdx>=0 ? String(row[nodeIdx]||'') : '';
+          studentData.push({seatNo:seat, name, accuracy:acc, weakNodes:nodes});
+          nodes.split(/[,，、\s]+/).map(n=>n.trim()).filter(n=>n&&/\d/.test(n)).forEach(n=>nodeSet.add(n));
+        });
+      }
 
       if (!studentData.length) return Swal.fire('錯誤','解析不到學生資料','error');
       globalUniqueNodes = Array.from(nodeSet);
