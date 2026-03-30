@@ -525,55 +525,94 @@ function renderQuestion() {
   const n = currentQuestions.length;
   document.getElementById('quiz-progress').style.width = Math.round(((currentQIndex+1)/n)*100) + '%';
 
-  // ★ Fix：正規化 difficulty（AI 可能回傳 very_easy 等非標準值）
-  const normDiff  = /hard/i.test(q.difficulty) ? 'hard' : /easy/i.test(q.difficulty) ? 'easy' : 'medium';
-  const diffColor = {easy:'#e8f5e9', medium:'#fff8e1', hard:'#ffebee'}[normDiff];
-  const diffText  = {easy:'#388e3c', medium:'#f57f17', hard:'#c62828'}[normDiff];
+  // 正規化：容錯 AI 回傳的非標準 type / difficulty
+  const normDiff  = /hard/i.test(q.difficulty||'') ? 'hard' : /easy/i.test(q.difficulty||'') ? 'easy' : 'medium';
+  const normType  = /fill/i.test(q.type||'') ? 'fill' : 'single';
   const diffLabel = {easy:'易', medium:'中', hard:'難'}[normDiff];
-  // ★ Fix：正規化 type（AI 可能回傳 fill_in_the_blank、single_choice 等）
-  const normType  = /fill/i.test(q.type) ? 'fill' : 'single';
   const typeLabel = normType === 'single' ? '選擇題' : '填充題';
+  const dc = {easy:{bg:'#e8f5e9',text:'#388e3c'}, medium:{bg:'#fff8e1',text:'#f57f17'}, hard:{bg:'#ffebee',text:'#c62828'}}[normDiff];
 
+  // ★ 改用純 DOM 操作，完全避免 innerHTML + template literal 遇特殊字元崩潰
+  const wrap = document.getElementById('question-container');
+  wrap.innerHTML = '';
+
+  // ── 題號列 ──
+  const row = document.createElement('div');
+  row.className = 'd-flex justify-content-between align-items-center mb-3 flex-wrap gap-1';
+  const pg = document.createElement('span');
+  pg.className = 'text-muted small';
+  pg.textContent = '第 ' + (currentQIndex+1) + ' / ' + n + ' 題';
+  const bdg = document.createElement('span');
+  bdg.className = 'badge';
+  bdg.style.cssText = 'background:'+dc.bg+';color:'+dc.text+';border:1px solid '+dc.text+'44';
+  bdg.textContent = typeLabel + ' ｜ ' + diffLabel;
+  row.appendChild(pg); row.appendChild(bdg);
+  wrap.appendChild(row);
+
+  // ── 題目文字 ──
+  const qt = document.createElement('div');
+  qt.className = 'fw-bold mb-3';
+  qt.style.cssText = 'font-size:1.05rem;line-height:1.7';
+  qt.textContent = (currentQIndex+1) + '. ' + (q.text||'');
+  wrap.appendChild(qt);
+
+  // ── 選項 / 填充 ──
   const LABELS = ['A','B','C','D','E','F'];
-  let optionsHtml = '';
-  // ★ Fix：改用 option index 當 onclick 參數，避免中文雙引號破壞 HTML 屬性
   if (normType === 'single') {
-    optionsHtml = (q.options||[]).map((opt, i) => {
-      const sel = userAnswers[currentQIndex] === opt ? 'selected' : '';
-      return `<button class="option-btn ${sel}" onclick="selectOption(${currentQIndex},${i},this)">
-        <span class="option-prefix">${LABELS[i]||i+1}</span>${opt}
-      </button>`;
-    }).join('');
+    (q.options||[]).forEach((opt, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'option-btn' + (userAnswers[currentQIndex] === opt ? ' selected' : '');
+      const pfx = document.createElement('span');
+      pfx.className = 'option-prefix';
+      pfx.textContent = LABELS[i] || String(i+1);
+      btn.appendChild(pfx);
+      btn.appendChild(document.createTextNode(opt));   // textContent 自動 escape 所有特殊字元
+      btn.addEventListener('click', function() {
+        const val = (currentQuestions[currentQIndex].options||[])[i];
+        userAnswers[currentQIndex] = val;
+        wrap.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+      });
+      wrap.appendChild(btn);
+    });
   } else {
-    const val = userAnswers[currentQIndex] || '';
-    optionsHtml = `<input class="fill-input" id="fill-input" type="text" placeholder="請輸入答案" value="${val}"
-      oninput="userAnswers[${currentQIndex}]=this.value" onkeydown="if(event.key==='Enter')navQuestion(1)">`;
+    const inp = document.createElement('input');
+    inp.className = 'fill-input'; inp.id = 'fill-input';
+    inp.type = 'text'; inp.placeholder = '請輸入答案';
+    inp.value = userAnswers[currentQIndex] || '';
+    inp.addEventListener('input',   () => { userAnswers[currentQIndex] = inp.value; });
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') navQuestion(1); });
+    wrap.appendChild(inp);
+    setTimeout(() => inp.focus(), 80);
   }
 
-  document.getElementById('question-container').innerHTML = `
-    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-1">
-      <span class="text-muted small">第 ${currentQIndex+1} / ${n} 題</span>
-      <span class="badge" style="background:${diffColor};color:${diffText};border:1px solid ${diffText}44">
-        ${typeLabel} ｜ ${diffLabel}
-      </span>
-    </div>
-    <div class="fw-bold mb-3" style="font-size:1.05rem;line-height:1.7">${currentQIndex+1}. ${q.text}</div>
-    ${optionsHtml}`;
+  // ★ Issue 3：顯示 hint 提示（若 AI 有提供）
+  if (q.hint) {
+    const hint = document.createElement('div');
+    hint.className = 'mt-3 p-2';
+    hint.style.cssText = 'background:#f3e5f5;border-left:4px solid #9c27b0;border-radius:6px;font-size:.88rem;color:#6a1b9a';
+    const strong = document.createElement('strong');
+    strong.textContent = '💡 提示：';
+    hint.appendChild(strong);
+    hint.appendChild(document.createTextNode(q.hint));
+    wrap.appendChild(hint);
+  }
 
-  if (normType === 'fill') setTimeout(() => document.getElementById('fill-input')?.focus(), 80);
-  document.getElementById('btn-prev').disabled    = currentQIndex === 0;
-  document.getElementById('btn-next').style.display   = currentQIndex < n-1 ? '' : 'none';
-  document.getElementById('btn-submit').style.display  = currentQIndex === n-1 ? '' : 'none';
+  document.getElementById('btn-prev').disabled          = currentQIndex === 0;
+  document.getElementById('btn-next').style.display     = currentQIndex < n-1 ? '' : 'none';
+  document.getElementById('btn-submit').style.display   = currentQIndex === n-1 ? '' : 'none';
 }
 
+// selectOption 已整合進 renderQuestion 的 addEventListener，此函數保留做向後相容
 function selectOption(idx, optIndex, btn) {
-  // ★ Fix：用 optIndex 從 currentQuestions 取真實選項文字
   const q = currentQuestions[idx];
   const value = (q && q.options) ? q.options[optIndex] : optIndex;
   userAnswers[idx] = value;
-  btn.closest('#question-container').querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('question-container').querySelectorAll('.option-btn')
+    .forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
 }
+
 
 function navQuestion(dir) {
   currentQIndex = Math.max(0, Math.min(currentQuestions.length-1, currentQIndex+dir));
