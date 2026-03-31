@@ -380,7 +380,7 @@ async function fetchAPI(action, data = {}) {
 }
 
 
-// ─── fetchAPIPost：POST 版本，供 submitQuizResult 等大 payload 使用 ──────
+// ─── fetchAPIPost：POST 版本，供大 payload 使用（20s timeout）──────
 async function fetchAPIPost(action, data = {}) {
   if (!GAS_API_URL) throw new Error('未設定 GAS API 網址');
   const controller = new AbortController();
@@ -406,6 +406,32 @@ async function fetchAPIPost(action, data = {}) {
   throw new Error(result.message);
 }
 
+// ─── fetchAPILong：AI 出題專用 POST（45s timeout，Gemini 需要較長時間）──
+async function fetchAPILong(action, data = {}) {
+  if (!GAS_API_URL) throw new Error('未設定 GAS API 網址');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 45000);
+  let resp;
+  try {
+    resp = await fetch(GAS_API_URL, {
+      method: 'POST', redirect: 'follow', signal: controller.signal,
+      headers: {'Content-Type': 'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action, data })
+    });
+  } catch(netErr) {
+    const isAbort = netErr.name === 'AbortError';
+    throw new Error(isAbort
+      ? '連線逾時（45秒）：Gemini API 回應過慢，將自動重試。'
+      : '連線失敗：(' + netErr.message + ')'
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+  const result = await resp.json();
+  if (result.status === 'success') return result.data;
+  throw new Error(result.message);
+}
+
 // ─── API 物件 ────────────────────────────────────────────────────────
 const API = {
   getTasks:                  ()               => fetchAPI('getTasks'),
@@ -415,8 +441,8 @@ const API = {
   verifyAdmin:               p                => fetchAPI('verifyAdmin',             {pwd:p}),
   uploadTaskData:            (n,g,s,d,nd)     => fetchAPIPost('uploadTaskData',      {taskName:n, grade:g, subject:s, studentData:d, uniqueNodes:nd}),  // ★ POST：學生名單資料量大
   setupDatabase:             ()               => fetchAPI('setupDatabase'),
-  generateBatch:             (nd,g,s,i)       => fetchAPI('generateBatch',           {nodesArray:nd, grade:g, subject:s, batchIndex:i}),
-  generateBatchFromFolder:   (fid,nd,g,s,i,m) => fetchAPI('generateBatchFromFolder', {folderId:fid, nodesArray:nd, grade:g, subject:s, batchIndex:i, mode:m}),
+  generateBatch:             (nd,g,s,i)       => fetchAPILong('generateBatch',       {nodesArray:nd, grade:g, subject:s, batchIndex:i}),  // ★ Gemini 出題需要長逾時
+  generateBatchFromFolder:   (fid,nd,g,s,i,m) => fetchAPILong('generateBatchFromFolder', {folderId:fid, nodesArray:nd, grade:g, subject:s, batchIndex:i, mode:m}),  // ★ 長逾時
   scanFolder:                fid              => fetchAPI('scanFolder',              {folderId:fid}),
   getQuizSettings:           ()               => fetchAPI('getQuizSettings'),
   updateQuizSettings:        c                => fetchAPI('updateQuizSettings',      {count:c}),
@@ -469,6 +495,8 @@ function switchView(id) {
     document.getElementById(v).style.display = v === id ? '' : 'none';
   });
   if (id === 'view-login') refreshAllTaskSelects();
+  // ★ 進入後台時恢復上次上傳面板（補強：switchView 路徑也能恢復）
+  if (id === 'view-admin') setTimeout(() => { if (window._restoreUploadPanel) window._restoreUploadPanel(); }, 150);
 }
 
 // ─── 初始化 ──────────────────────────────────────────────────────────
