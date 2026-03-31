@@ -380,12 +380,38 @@ async function fetchAPI(action, data = {}) {
 }
 
 
+// ─── fetchAPIPost：POST 版本，供 submitQuizResult 等大 payload 使用 ──────
+async function fetchAPIPost(action, data = {}) {
+  if (!GAS_API_URL) throw new Error('未設定 GAS API 網址');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  let resp;
+  try {
+    resp = await fetch(GAS_API_URL, {
+      method: 'POST', redirect: 'follow', signal: controller.signal,
+      headers: {'Content-Type': 'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action, data })
+    });
+  } catch(netErr) {
+    const isAbort = netErr.name === 'AbortError';
+    throw new Error(isAbort
+      ? '送出逾時（20秒）：請確認網路連線後再試。'
+      : '送出失敗：(' + netErr.message + ')'
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+  const result = await resp.json();
+  if (result.status === 'success') return result.data;
+  throw new Error(result.message);
+}
+
 // ─── API 物件 ────────────────────────────────────────────────────────
 const API = {
   getTasks:                  ()               => fetchAPI('getTasks'),
   getStudents:               t                => fetchAPI('getStudents',             {taskName:t}),
   generateQuiz:              (n,t)            => fetchAPI('generateQuiz',            {weakNode:n, taskName:t}),
-  submitQuizResult:          d                => fetchAPI('submitQuizResult',        {payload:d}),
+  submitQuizResult:          d                => fetchAPIPost('submitQuizResult',    {payload:d}),  // ★ 使用 POST，不受 GET URL 長度限制
   verifyAdmin:               p                => fetchAPI('verifyAdmin',             {pwd:p}),
   uploadTaskData:            (n,g,s,d,nd)     => fetchAPI('uploadTaskData',          {taskName:n, grade:g, subject:s, studentData:d, uniqueNodes:nd}),
   setupDatabase:             ()               => fetchAPI('setupDatabase'),
