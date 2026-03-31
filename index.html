@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>車城國小｜學力檢測 AI 智慧補救系統</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -63,9 +63,65 @@
     .app-footer { background:#1565c0; color:rgba(255,255,255,.75); text-align:center; padding:12px 0; font-size:.78rem; margin-top:40px; }
     .app-footer a { color:rgba(255,255,255,.85); text-decoration:none; }
 
+    /* ★ 手機響應式：防止 iOS 自動縮放輸入框（font-size < 16px 會觸發） */
+    input, select, textarea {
+      font-size: 16px !important;
+    }
+
+    /* ★ 計算紙 canvas：touch-action:none 是手機書寫的關鍵，
+       防止瀏覽器把觸控事件攔截為「捲動」導致無法畫線 */
+    #signature-pad {
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+      cursor: crosshair;
+    }
+
+    /* ★ 平板 (max-width:768px) */
+    @media(max-width:768px) {
+      .app-header { padding:12px 0; margin-bottom:16px; }
+      .app-header h2 { font-size:1.1rem; }
+
+      /* 題目卡片減少內距 */
+      #view-quiz .card { padding:14px !important; }
+      .option-btn { padding:12px 14px; font-size:.95rem; margin-bottom:8px; }
+
+      /* 計算紙在手機上縮短，避免佔版面 */
+      .signature-pad { height:160px !important; }
+
+      /* 導覽按鈕加大點擊區域 */
+      #btn-prev, #btn-next, #btn-submit {
+        padding:10px 20px; font-size:.95rem;
+        min-height:44px; /* Apple HIG 最小觸控目標 */
+      }
+
+      /* 作答明細標籤縮小 */
+      .result-correct, .result-wrong { padding:10px 12px; font-size:.88rem; }
+
+      /* 後台 tab 文字適度縮小 */
+      .nav-link { font-size:.82rem; padding:6px 8px; }
+    }
+
+    /* ★ 手機 (max-width:576px) */
     @media(max-width:576px) {
       .option-btn { padding:11px 14px; font-size:.92rem; }
       .source-btn { font-size:.78rem; }
+
+      /* 計算紙更短 */
+      .signature-pad { height:130px !important; }
+
+      /* 計時器、題號排版 */
+      #view-quiz .d-flex.justify-content-between { flex-wrap:wrap; gap:6px; }
+
+      /* 後台卡片減少內距 */
+      .card.p-3 { padding:12px !important; }
+      .card.p-4 { padding:14px !important; }
+
+      /* 登入頁按鈕 */
+      .btn-lg { font-size:1rem; padding:10px 16px; }
+
+      /* 讓 badge 不換行 */
+      #timer { font-size:.9rem !important; }
     }
     @media print {
       .app-header,.nav-tabs,.tab-content,#view-login,#view-quiz,#view-result,
@@ -90,7 +146,7 @@
 <header class="app-header">
   <div class="container text-center">
     <h2><i class="fa-solid fa-graduation-cap me-2"></i>車城國小｜學力檢測 AI 智慧補救系統</h2>
-    <p>數學科 × 國語科 ｜ Gemini AI 差異化出題 ｜ PDF 教材出題 ｜ 弱點節點精準補救（車城國小公開測試版本）</p>
+    <p>數學科 × 國語科 ｜ Gemini AI 差異化出題 ｜ PDF 教材出題 ｜ 弱點節點精準補救（內容僅供參考）</p>
   </div>
 </header>
 
@@ -335,7 +391,7 @@
           <button class="btn btn-outline-info btn-sm" onclick="toggleCanvas()"><i class="fa-solid fa-pencil me-1"></i>計算紙</button>
         </div>
         <div id="draw-panel">
-          <canvas id="signature-pad" class="signature-pad"></canvas>
+          <canvas id="signature-pad" class="signature-pad" style="touch-action:none"></canvas>
           <button class="btn btn-light btn-sm mt-1" onclick="sigPad&&sigPad.clear()">清除</button>
         </div>
         <div class="d-flex justify-content-between mt-4">
@@ -880,19 +936,56 @@ function initCanvas() {
   const canvas = document.getElementById('signature-pad');
   if (!canvas) return;
   const dpr = window.devicePixelRatio || 1;
+
+  // ★ 手機偵測：依螢幕寬度動態決定計算紙高度
+  const isMobile  = () => window.innerWidth <= 576;
+  const isTablet  = () => window.innerWidth <= 768;
+  const padHeight = () => isMobile() ? 130 : isTablet() ? 160 : 220;
+
   const resize = () => {
     const w = canvas.offsetWidth;
-    canvas.width  = w*dpr; canvas.height = 220*dpr;
+    const h = padHeight();
+    canvas.width  = w * dpr;
+    canvas.height = h * dpr;
     canvas.getContext('2d').scale(dpr, dpr);
-    canvas.style.height = '220px';
+    canvas.style.width  = '100%';
+    canvas.style.height = h + 'px';
     if (sigPad) sigPad.clear();
   };
-  sigPad = new SignaturePad(canvas, {minWidth:1.5, maxWidth:3, penColor:'#1565c0'});
-  window.addEventListener('resize', resize); resize();
+
+  // ★ 手機書寫關鍵：passive:false 讓 touch 事件可以被 preventDefault()
+  //   SignaturePad 內部需要 preventDefault 才能阻止捲動並接收觸控
+  sigPad = new SignaturePad(canvas, {
+    minWidth: 1.5, maxWidth: 3, penColor: '#1565c0',
+    velocityFilterWeight: 0.7
+  });
+
+  // ★ 防止手機觸控畫線時頁面捲動
+  canvas.addEventListener('touchstart', e => e.preventDefault(), {passive:false});
+  canvas.addEventListener('touchmove',  e => e.preventDefault(), {passive:false});
+
+  window.addEventListener('resize', resize);
+  resize();
 }
 function toggleCanvas() {
-  const p = document.getElementById('draw-panel');
-  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+  const p      = document.getElementById('draw-panel');
+  const canvas = document.getElementById('signature-pad');
+  const isOpen = p.style.display === 'block';
+  p.style.display = isOpen ? 'none' : 'block';
+  // ★ 展開時重新計算尺寸（手機橫豎轉向後寬度改變）
+  if (!isOpen && sigPad && canvas) {
+    setTimeout(() => {
+      const dpr = window.devicePixelRatio || 1;
+      const h   = window.innerWidth <= 576 ? 130 : window.innerWidth <= 768 ? 160 : 220;
+      const w   = canvas.offsetWidth;
+      canvas.width  = w * dpr;
+      canvas.height = h * dpr;
+      canvas.getContext('2d').scale(dpr, dpr);
+      canvas.style.width  = '100%';
+      canvas.style.height = h + 'px';
+      sigPad.clear();
+    }, 60);
+  }
 }
 
 // ─── 設定頁 ───────────────────────────────────────────────────────────
